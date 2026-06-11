@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VersicherungsQuiz</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .hero { text-align:center; padding: 60px 20px 30px; }
+  .hero h1 { font-size: 3rem; font-weight:900; margin-bottom: 10px; }
+  .hero p { color: var(--muted); font-size: 1.15rem; margin-bottom: 32px; }
+  .btn-big { display:inline-block; padding: 18px 40px; border-radius: 12px; font-size: 1.2rem; font-weight:800; text-decoration:none; margin: 8px; }
+  .btn-host { background: var(--primary); color:#fff; }
+  .btn-join { background: var(--green); color:#0a2e1e; }
+  .features { display:flex; flex-wrap:wrap; gap:16px; justify-content:center; max-width:700px; margin:0 auto; padding:20px; }
+  .feature { background:var(--card); border-radius:12px; padding:20px 24px; flex:1; min-width:200px; text-align:center; }
+  .feature-icon { font-size:2rem; margin-bottom:8px; }
+  .feature h3 { font-size:1rem; margin-bottom:6px; }
+  .feature p { color:var(--muted); font-size:0.88rem; }
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="logo" style="font-size:2rem">Versicherungs<span>Quiz</span></div>
+  <h1>Lernen macht Spass!</h1>
+  <p>Kahoot-style Wissensquiz fuer die Versicherungsbranche</p>
+  <a href="host.html" class="btn-big btn-host">🎮 Quiz hosten</a>
+  <a href="join.html" class="btn-big btn-join">📱 Mitspielen</a>
+</div>
+<div class="features">
+  <div class="feature">
+    <div class="feature-icon">📱</div>
+    <h3>QR-Code Beitritt</h3>
+    <p>Spieler scannen einfach den QR-Code und spielen auf dem Handy mit</p>
+  </div>
+  <div class="feature">
+    <div class="feature-icon">⚡</div>
+    <h3>Echtzeit-Punkte</h3>
+    <p>Schnelle Antworten geben mehr Punkte &ndash; Spannung bis zur letzten Sekunde</p>
+  </div>
+  <div class="feature">
+    <div class="feature-icon">🏆</div>
+    <h3>Live-Rangliste</h3>
+    <p>Nach jeder Frage sehen alle den aktuellen Zwischenstand</p>
+  </div>
+  <div class="feature">
+    <div class="feature-icon">✏️</div>
+    <h3>Eigene Fragen</h3>
+    <p>Eigene Fragenkataloge als JSON hochladen und nutzen</p>
+  </div>
+</div>
+</body>
+</html>

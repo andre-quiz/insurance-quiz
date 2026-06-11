@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Versicherungsquiz – Host</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body { background: #0e0824; }
+.host-wrap { width: 100%; max-width: 1100px; padding: 16px; margin: 0 auto; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.question-editor { width: 100%; }
+.q-preview { background:#12092a; border-radius:10px; padding:16px; margin-top:12px; }
+.q-preview .q-item { padding:10px 14px; border-left:3px solid var(--primary); margin-bottom:8px; font-size:0.95rem; cursor:pointer; border-radius:0 8px 8px 0; }
+.q-preview .q-item:hover { background:#1e1040; }
+.host-answers { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+.host-ans-btn { padding:16px; font-size:1rem; color:#fff; border-radius:10px; font-weight:700; text-align:left; cursor:default; }
+.host-ans-btn.a0{background:#e21b3c} .host-ans-btn.a1{background:#1368ce}
+.host-ans-btn.a2{background:#d89e00} .host-ans-btn.a3{background:#26890c}
+.host-ans-btn.correct-ans { outline:4px solid #fff; }
+.progress-ring { text-align:center; padding:20px; }
+.big-count { font-size:5rem; font-weight:900; color:var(--yellow); line-height:1; }
+.tab-bar { display:flex; gap:8px; margin-bottom:16px; }
+.tab { padding:10px 20px; border-radius:8px; background:#1e1240; cursor:pointer; font-weight:700; color:var(--muted); border:2px solid transparent; }
+.tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+textarea { min-height:90px; font-size:0.95rem; }
+</style>
+</head>
+<body>
+<div class="host-wrap">
+  <div class="logo" style="text-align:center">Versicherungs<span>Quiz</span> <span style="font-size:1rem;color:var(--muted)">HOST</span></div>
+
+  <!-- SETUP SCREEN -->
+  <div id="setup-screen">
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab('default')">Standard-Fragen</div>
+      <div class="tab" onclick="switchTab('custom')">Eigene Fragen</div>
+    </div>
+
+    <div id="tab-default" class="card">
+      <h2>📚 Standard-Fragenkatalog</h2>
+      <p style="color:var(--muted);margin:10px 0">15 Versicherungs-Fachfragen bereits geladen.</p>
+      <button class="btn-primary" id="start-default-btn">Spiel erstellen ▶</button>
+    </div>
+
+    <div id="tab-custom" class="card hidden">
+      <h2>✏️ Eigene Fragen</h2>
+      <p style="color:var(--muted);margin:8px 0 16px">Fragen als JSON eingeben oder importieren.</p>
+      <label>JSON-Format: <code style="color:var(--yellow)">[{"question":"…","answers":["A","B","C","D"],"correct":0,"time":20}]</code></label>
+      <textarea id="custom-json" placeholder='[{"question":"Was ist eine Police?","answers":["Dokument","Fahrzeug","Person","Behörde"],"correct":0,"time":15}]'></textarea>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn-primary" onclick="loadCustom()" style="flex:1">Laden & Vorschau</button>
+        <label style="flex:1">
+          <button class="btn-primary" style="background:#3d2f72" onclick="document.getElementById('file-input').click()">📁 JSON-Datei</button>
+          <input type="file" id="file-input" accept=".json" style="display:none" onchange="loadFile(this)">
+        </label>
+      </div>
+      <div id="custom-preview" class="q-preview hidden"></div>
+      <button class="btn-primary btn-green hidden" id="start-custom-btn" style="margin-top:12px">Spiel mit eigenen Fragen erstellen ▶</button>
+    </div>
+  </div>
+
+  <!-- LOBBY SCREEN -->
+  <div id="lobby-screen" class="hidden">
+    <div class="two-col">
+      <div class="card">
+        <h2 style="margin-bottom:12px">🎮 Spieler beitreten</h2>
+        <label>Spiel-PIN</label>
+        <div class="pin-display" id="pin-display">––––––</div>
+        <p class="center" style="color:var(--muted);font-size:0.9rem">oder QR-Code scannen:</p>
+        <img id="qr-img" width="200" height="200" alt="QR Code">
+        <p class="center" style="color:var(--muted);font-size:0.85rem;margin-top:6px" id="join-url"></p>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h2>👥 Spieler (<span id="player-count">0</span>)</h2>
+        </div>
+        <div class="player-chips" id="player-chips"></div>
+        <button class="btn-primary btn-green" id="start-game-btn" style="margin-top:24px" disabled>
+          Spiel starten (mind. 1 Spieler)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUESTION SCREEN (host view) -->
+  <div id="question-screen" class="card hidden">
+    <div class="stats-bar" id="host-stats"></div>
+    <div class="timer-bar-wrap" style="margin:10px 0"><div class="timer-bar" id="host-timer-bar"></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span class="timer-num" id="host-timer-num"></span>
+      <span style="color:var(--muted)" id="host-q-progress"></span>
+      <span style="color:var(--green)" id="host-answered"></span>
+    </div>
+    <div class="question-box" id="host-q-text"></div>
+    <div class="host-answers" id="host-answers"></div>
+  </div>
+
+  <!-- ANSWER REVEAL SCREEN -->
+  <div id="answer-screen" class="card hidden">
+    <h2 class="center" style="margin-bottom:12px">Auflösung</h2>
+    <div class="question-box" id="reveal-q-text" style="background:#3d2f72;margin-bottom:14px"></div>
+    <div class="host-answers" id="reveal-answers"></div>
+    <div class="stats-bar" style="margin-top:14px">
+      <div>✅ Richtig: <strong id="reveal-correct"></strong></div>
+      <div>👥 Gesamt: <strong id="reveal-total"></strong></div>
+    </div>
+    <button class="btn-primary" id="show-lb-btn" style="margin-top:16px">Rangliste zeigen 🏆</button>
+  </div>
+
+  <!-- LEADERBOARD SCREEN -->
+  <div id="leaderboard-screen" class="card hidden">
+    <h2 class="center" style="margin-bottom:16px">🏆 Rangliste</h2>
+    <div id="host-lb-list"></div>
+    <button class="btn-primary btn-green" id="next-btn" style="margin-top:16px">Nächste Frage ▶</button>
+    <button class="btn-primary" id="end-btn" style="margin-top:8px;background:#3d2f72">Spiel beenden</button>
+  </div>
+
+  <!-- PODIUM -->
+  <div id="podium-screen" class="card hidden">
+    <h1 class="center">🎉 Spiel beendet!</h1>
+    <div class="podium" id="host-podium"></div>
+    <div id="host-full-lb"></div>
+    <button class="btn-primary" onclick="location.reload()" style="margin-top:16px">Neues Spiel</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let currentPin = '';
+let customQuestions = null;
+let timerInterval = null;
+const shapes = ['■','●','▲','✦'];
+
+function show(id) {
+  ['setup-screen','lobby-screen','question-screen','answer-screen','leaderboard-screen','podium-screen']
+    .forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', (i===0&&tab==='default')||(i===1&&tab==='custom')));
+  document.getElementById('tab-default').classList.toggle('hidden', tab !== 'default');
+  document.getElementById('tab-custom').classList.toggle('hidden', tab !== 'custom');
+}
+
+// ── SETUP ──
+document.getElementById('start-default-btn').addEventListener('click', () => {
+  socket.emit('host_create', {});
+});
+
+document.getElementById('start-custom-btn').addEventListener('click', () => {
+  socket.emit('host_create', { questions: customQuestions });
+});
+
+function loadCustom() {
+  try {
+    const q = JSON.parse(document.getElementById('custom-json').value);
+    showCustomPreview(q);
+  } catch(e) { alert('Ungültiges JSON: ' + e.message); }
+}
+
+function loadFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('custom-json').value = e.target.result;
+    loadCustom();
+  };
+  reader.readAsText(file);
+}
+
+function showCustomPreview(q) {
+  customQuestions = q;
+  const prev = document.getElementById('custom-preview');
+  prev.classList.remove('hidden');
+  prev.innerHTML = `<strong>${q.length} Fragen geladen:</strong>` +
+    q.map((item, i) => `<div class="q-item">${i+1}. ${item.question}</div>`).join('');
+  document.getElementById('start-custom-btn').classList.remove('hidden');
+}
+
+// ── GAME CREATED ──
+socket.on('game_created', ({ pin, qrCode, joinUrl }) => {
+  currentPin = pin;
+  document.getElementById('pin-display').textContent = pin;
+  document.getElementById('qr-img').src = qrCode;
+  document.getElementById('join-url').textContent = joinUrl;
+  show('lobby-screen');
+});
+
+// ── LOBBY ──
+socket.on('player_joined', ({ count, players }) => {
+  document.getElementById('player-count').textContent = count;
+  document.getElementById('player-chips').innerHTML = players.map(n => `<span class="chip">${n}</span>`).join('');
+  const btn = document.getElementById('start-game-btn');
+  btn.disabled = count === 0;
+  btn.textContent = count > 0 ? `Spiel starten (${count} Spieler) ▶` : 'Spiel starten (mind. 1 Spieler)';
+});
+
+socket.on('player_left', ({ count, players }) => {
+  document.getElementById('player-count').textContent = count;
+  document.getElementById('player-chips').innerHTML = players.map(n => `<span class="chip">${n}</span>`).join('');
+});
+
+document.getElementById('start-game-btn').addEventListener('click', () => {
+  socket.emit('host_start', { pin: currentPin });
+});
+
+// ── QUESTION ──
+socket.on('question_start', ({ questionIndex, total, question, answers, time }) => {
+  clearInterval(timerInterval);
+  document.getElementById('host-q-progress').textContent = `Frage ${questionIndex+1}/${total}`;
+  document.getElementById('host-q-text').textContent = question;
+  document.getElementById('host-answered').textContent = '';
+
+  const grid = document.getElementById('host-answers');
+  grid.innerHTML = answers.map((a, i) => `
+    <button class="host-ans-btn a${i}" disabled>
+      <span class="shape">${shapes[i]}</span> ${a}
+    </button>`).join('');
+
+  let remaining = time;
+  document.getElementById('host-timer-num').textContent = remaining;
+  document.getElementById('host-timer-bar').style.width = '100%';
+  timerInterval = setInterval(() => {
+    remaining--;
+    document.getElementById('host-timer-num').textContent = remaining;
+    document.getElementById('host-timer-bar').style.width = (remaining/time*100)+'%';
+    if (remaining <= 0) clearInterval(timerInterval);
+  }, 1000);
+
+  show('question-screen');
+});
+
+socket.on('answer_progress', ({ answered, total }) => {
+  document.getElementById('host-answered').textContent = `${answered}/${total} geantwortet`;
+});
+
+// ── REVEAL ──
+socket.on('question_end', ({ correctAnswer, answerText, correctCount, totalPlayers, results }) => {
+  clearInterval(timerInterval);
+  const qText = document.getElementById('host-q-text').textContent;
+  document.getElementById('reveal-q-text').textContent = qText;
+
+  const answers = document.getElementById('host-answers').querySelectorAll('button');
+  const reveal = document.getElementById('reveal-answers');
+  reveal.innerHTML = Array.from(answers).map((btn, i) => `
+    <button class="host-ans-btn a${i} ${i===correctAnswer?'correct-ans':''}" disabled>
+      ${i===correctAnswer?'✅ ':''} ${btn.textContent.trim()}
+    </button>`).join('');
+
+  document.getElementById('reveal-correct').textContent = correctCount;
+  document.getElementById('reveal-total').textContent = totalPlayers;
+  show('answer-screen');
+});
+
+document.getElementById('show-lb-btn').addEventListener('click', () => {
+  socket.emit('host_leaderboard', { pin: currentPin });
+});
+
+// ── LEADERBOARD ──
+socket.on('show_leaderboard', ({ leaderboard, hasMore }) => {
+  const list = document.getElementById('host-lb-list');
+  list.innerHTML = leaderboard.slice(0,10).map(({ rank, name, score }) => {
+    const medal = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':rank+'.';
+    return `<div class="lb-row"><span class="lb-rank">${medal}</span><span class="lb-name">${name}</span><span class="lb-score">${score.toLocaleString('de-DE')}</span></div>`;
+  }).join('');
+  document.getElementById('next-btn').textContent = hasMore ? 'Nächste Frage ▶' : 'Endergebnis anzeigen 🏆';
+  show('leaderboard-screen');
+});
+
+document.getElementById('next-btn').addEventListener('click', () => {
+  socket.emit('host_next', { pin: currentPin });
+});
+document.getElementById('end-btn').addEventListener('click', () => {
+  if (confirm('Spiel wirklich beenden?')) socket.emit('host_next', { pin: currentPin });
+});
+
+// ── PODIUM ──
+socket.on('show_podium', ({ leaderboard }) => {
+  const top3 = leaderboard.slice(0,3);
+  const order = [top3[1], top3[0], top3[2]].filter(Boolean);
+  const classes = ['podium-2','podium-1','podium-3'];
+  const icons = ['🥈','🥇','🥉'];
+  document.getElementById('host-podium').innerHTML = order.map((p,i) => `
+    <div class="podium-block ${classes[i]}">
+      <div class="podium-icon">${icons[i]}</div>
+      <div class="podium-name">${p.name}</div>
+      <div class="podium-score">${p.score.toLocaleString('de-DE')}</div>
+    </div>`).join('');
+
+  document.getElementById('host-full-lb').innerHTML = '<h3 style="margin:16px 0 10px">Alle Ergebnisse</h3>' +
+    leaderboard.map(({rank,name,score}) =>
+      `<div class="lb-row"><span class="lb-rank">${rank}.</span><span class="lb-name">${name}</span><span class="lb-score">${score.toLocaleString('de-DE')}</span></div>`
+    ).join('');
+  show('podium-screen');
+});
+
+socket.on('error_msg', msg => alert(msg));
+</script>
+</body>
+</html>

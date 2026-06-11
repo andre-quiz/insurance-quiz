@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Versicherungsquiz – Beitreten</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="logo">Versicherungs<span>Quiz</span></div>
+
+<div id="join-screen" class="card">
+  <h2 class="center">Spiel beitreten</h2>
+  <label>Spiel-PIN</label>
+  <input id="pin-input" type="text" inputmode="numeric" maxlength="6" placeholder="6-stellige PIN" autocomplete="off">
+  <label class="mt" style="display:block">Dein Name</label>
+  <input id="name-input" type="text" maxlength="20" placeholder="Dein Name" autocomplete="off">
+  <button class="btn-primary" id="join-btn">Beitreten 🎮</button>
+  <p id="join-error" style="color:var(--red);margin-top:12px;text-align:center;font-weight:700;"></p>
+</div>
+
+<div id="lobby-screen" class="card hidden">
+  <h2 class="center pulse" id="lobby-name"></h2>
+  <p class="center" style="color:var(--muted);margin:10px 0">Du bist dabei! Warte auf den Host…</p>
+  <div class="waiting">
+    <span style="font-size:3rem">⏳</span>
+    <p class="pulse" style="margin-top:12px">Das Spiel startet gleich…</p>
+  </div>
+</div>
+
+<div id="question-screen" class="card hidden">
+  <div class="progress-label" id="q-progress"></div>
+  <div class="timer-bar-wrap"><div class="timer-bar" id="timer-bar"></div></div>
+  <div class="timer-num" id="timer-num"></div>
+  <div class="question-box" id="q-text"></div>
+  <div class="answers-grid" id="answers-grid"></div>
+</div>
+
+<div id="wait-answer-screen" class="card hidden">
+  <div class="center" style="font-size:3rem;margin:20px 0">✅</div>
+  <h2 class="center">Antwort eingereicht!</h2>
+  <p class="center pulse" style="color:var(--muted);margin-top:12px">Warte auf die anderen Spieler…</p>
+</div>
+
+<div id="result-screen" class="hidden card">
+  <div id="result-box"></div>
+  <div class="stats-bar">
+    <div>Punkte gesamt: <strong id="res-total"></strong></div>
+    <div>Serie: <strong id="res-streak">🔥</strong></div>
+  </div>
+</div>
+
+<div id="leaderboard-screen" class="card hidden">
+  <h2 class="center" style="margin-bottom:16px">🏆 Rangliste</h2>
+  <div id="lb-list"></div>
+  <p class="waiting pulse">Nächste Frage kommt gleich…</p>
+</div>
+
+<div id="podium-screen" class="card hidden">
+  <h2 class="center" style="margin-bottom:8px">🎉 Spiel beendet!</h2>
+  <div class="podium" id="podium"></div>
+  <div id="full-lb"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let myName = '';
+let timerInterval = null;
+const shapes = ['■','●','▲','✦'];
+
+function show(id) {
+  ['join-screen','lobby-screen','question-screen','wait-answer-screen',
+   'result-screen','leaderboard-screen','podium-screen'].forEach(s => {
+    document.getElementById(s).classList.toggle('hidden', s !== id);
+  });
+}
+
+// Pre-fill PIN from URL
+const urlPin = new URLSearchParams(location.search).get('pin');
+if (urlPin) document.getElementById('pin-input').value = urlPin;
+
+document.getElementById('join-btn').addEventListener('click', () => {
+  const pin = document.getElementById('pin-input').value.trim();
+  const name = document.getElementById('name-input').value.trim();
+  if (!pin || !name) { document.getElementById('join-error').textContent = 'Bitte PIN und Name eingeben!'; return; }
+  myName = name;
+  socket.emit('player_join', { pin, name });
+});
+
+socket.on('join_error', msg => {
+  document.getElementById('join-error').textContent = msg;
+});
+
+socket.on('join_success', ({ name }) => {
+  document.getElementById('lobby-name').textContent = '👋 Hallo, ' + name + '!';
+  show('lobby-screen');
+});
+
+socket.on('question_start', ({ questionIndex, total, question, answers, time }) => {
+  clearInterval(timerInterval);
+  document.getElementById('q-progress').textContent = `Frage ${questionIndex + 1} von ${total}`;
+  document.getElementById('q-text').textContent = question;
+
+  const grid = document.getElementById('answers-grid');
+  grid.innerHTML = '';
+  answers.forEach((a, i) => {
+    const btn = document.createElement('button');
+    btn.className = `answer-btn a${i}`;
+    btn.innerHTML = `<span class="shape">${shapes[i]}</span><span>${a}</span>`;
+    btn.onclick = () => {
+      grid.querySelectorAll('button').forEach(b => b.disabled = true);
+      socket.emit('player_answer', { pin: urlPin || socket.id, answerIndex: i });
+      show('wait-answer-screen');
+    };
+    grid.appendChild(btn);
+  });
+
+  let remaining = time;
+  document.getElementById('timer-num').textContent = remaining;
+  document.getElementById('timer-bar').style.width = '100%';
+
+  timerInterval = setInterval(() => {
+    remaining--;
+    document.getElementById('timer-num').textContent = remaining;
+    document.getElementById('timer-bar').style.width = (remaining / time * 100) + '%';
+    if (remaining <= 0) clearInterval(timerInterval);
+  }, 1000);
+
+  show('question-screen');
+  // Store current pin from server
+  socket.data = socket.data || {};
+});
+
+// Player must tell server their pin — attach it on join
+socket.on('join_success', ({ name, pin }) => {
+  socket._pin = pin;
+  document.getElementById('lobby-name').textContent = '👋 Hallo, ' + name + '!';
+  show('lobby-screen');
+});
+
+// Override player_answer to use stored pin
+document.addEventListener('click', () => {}, true); // already handled above
+
+socket.on('answer_received', () => { /* handled by show wait */ });
+
+socket.on('your_result', ({ correct, points, totalScore, streak }) => {
+  clearInterval(timerInterval);
+  const box = document.getElementById('result-box');
+  if (correct) {
+    box.innerHTML = `<div class="result-correct">✅ Richtig!<div class="points-gained">+${points} Punkte</div></div>`;
+  } else {
+    box.innerHTML = `<div class="result-wrong">❌ Falsch<div class="points-gained">0 Punkte</div></div>`;
+  }
+  document.getElementById('res-total').textContent = totalScore.toLocaleString('de-DE') + ' Punkte';
+  document.getElementById('res-streak').textContent = streak >= 2 ? `🔥 ${streak}` : streak;
+  show('result-screen');
+});
+
+socket.on('show_leaderboard', ({ leaderboard }) => {
+  const list = document.getElementById('lb-list');
+  list.innerHTML = '';
+  leaderboard.slice(0, 10).forEach(({ rank, name, score }) => {
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank + '.';
+    list.innerHTML += `<div class="lb-row"><span class="lb-rank">${medal}</span><span class="lb-name">${name}</span><span class="lb-score">${score.toLocaleString('de-DE')}</span></div>`;
+  });
+  show('leaderboard-screen');
+});
+
+socket.on('show_podium', ({ leaderboard }) => {
+  const top3 = leaderboard.slice(0, 3);
+  const order = [top3[1], top3[0], top3[2]].filter(Boolean);
+  const classes = ['podium-2','podium-1','podium-3'];
+  const icons = ['🥈','🥇','🥉'];
+  const podiumEl = document.getElementById('podium');
+  podiumEl.innerHTML = order.map((p, i) => `
+    <div class="podium-block ${classes[i]}">
+      <div class="podium-icon">${icons[i]}</div>
+      <div class="podium-name">${p.name}</div>
+      <div class="podium-score">${p.score.toLocaleString('de-DE')}</div>
+    </div>`).join('');
+
+  const fullLb = document.getElementById('full-lb');
+  fullLb.innerHTML = '<h3 style="margin:16px 0 10px">Alle Ergebnisse</h3>' +
+    leaderboard.map(({ rank, name, score }) =>
+      `<div class="lb-row"><span class="lb-rank">${rank}.</span><span class="lb-name">${name}</span><span class="lb-score">${score.toLocaleString('de-DE')}</span></div>`
+    ).join('');
+  show('podium-screen');
+});
+
+socket.on('host_disconnected', () => {
+  alert('Der Host hat das Spiel beendet.');
+  location.href = '/join.html';
+});
+
+// Fix: re-attach pin on every player_answer click
+const origEmit = socket.emit.bind(socket);
+socket.emit = function(event, data, ...rest) {
+  if (event === 'player_answer' && socket._pin) {
+    data.pin = socket._pin;
+  }
+  return origEmit(event, data, ...rest);
+};
+</script>
+</body>
+</html>
